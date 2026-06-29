@@ -1,0 +1,417 @@
+=====================================================================
+WYJAŚNIENIE KODU APLIKACJI "LISTA ZADAŃ" (TODO) W SWIFTUI
+=====================================================================
+
+Poniżej znajduje się szczegółowe wyjaśnienie każdej części kodu.
+Kod jest napisany w języku Swift z użyciem frameworka SwiftUI
+do budowania interfejsu graficznego na system macOS.
+
+
+=====================================================================
+1. STRUKTURY DANYCH (modele)
+=====================================================================
+
+struct TodoItem: Codable, Identifiable {
+    var id = UUID()
+    var title: String
+    var isDone = false
+}
+
+- "struct" – to słowo kluczowe w Swifcie, które definiuje strukturę
+  (czyli "szablon" dla danych). W tym przypadku mówi: "chcę stworzyć
+  nowy typ danych o nazwie TodoItem".
+
+- "Codable" – to protokół (zestaw wymagań), który mówi, że tę strukturę
+  można zamienić na JSON (format tekstowy do przechowywania danych)
+  i odwrotnie – z JSON-a odtworzyć strukturę.
+
+- "Identifiable" – protokół mówiący, że każdy element ma unikalne ID,
+  dzięki czemu SwiftUI wie, które elementy na liście zostały dodane,
+  usunięte lub zmienione.
+
+- "var id = UUID()" – każdy obiekt dostaje unikalny identyfikator
+  (UUID = Universally Unique Identifier). "var" oznacza zmienną,
+  której wartość może się zmieniać. UUID() tworzy losowy, unikalny
+  numer identyfikacyjny.
+
+- "var title: String" – zmienna o nazwie "title" (tytuł zadania),
+  typu "String" (tekst).
+
+- "var isDone = false" – zmienna mówiąca, czy zadanie jest zrobione.
+  "Bool" to typ logiczny – może być true (prawda) lub false (fałsz).
+  Domyślnie ustawiamy na false (nieskończone).
+
+---------------------------------------------------------------------
+
+struct TaskGroup: Codable, Identifiable {
+    var id = UUID()
+    var name: String
+    var tasks: [TodoItem]
+}
+
+- TaskGroup to "grupa zadań" – czyli lista list. Każda grupa ma:
+  * id – unikalny identyfikator
+  * name – nazwę grupy (np. "Zakupy", "Praca")
+  * tasks – tablicę ([ ]) obiektów typu TodoItem (zadania w tej grupie)
+
+
+=====================================================================
+2. GŁÓWNY WIDOK (ContentView)
+=====================================================================
+
+struct ContentView: View {
+
+- To jest główny ekran aplikacji. "View" to protokół SwiftUI,
+  który mówi, że ta struktura jest widokiem (ekranem) – musi mieć
+  właściwość "var body: some View", czyli opis tego, co ma być
+  pokazane na ekranie.
+
+---------------------------------------------------------------------
+2.1. ZMIENNE STANU (State)
+---------------------------------------------------------------------
+
+    @AppStorage("groups") private var groupsData: Data = Data()
+    @State private var groups: [TaskGroup] = []
+    @State private var selectedGroup: TaskGroup.ID?
+    @State private var newGroupName = ""
+    @State private var newTaskTitle = ""
+
+- "@AppStorage" – to specjalne opakowanie ("property wrapper"),
+  które automatycznie zapisuje wartość do UserDefaults (trwałego
+  magazynu danych na komputerze). Za każdym razem, gdy zmienna
+  groupsData się zmienia, iOS/macOS automatycznie zapisuje ją
+  na dysku. "groups" to klucz (nazwa) pod którą dane są przechowywane.
+
+- "@State" – to opakowanie dla zmiennych, które są "stanem" widoku.
+  Gdy zmienna z @State się zmienia, SwiftUI automatycznie przerysowuje
+  ekran, aby pokazać nowe dane.
+
+- "groups: [TaskGroup]" – lista wszystkich grup zadań.
+  "[TaskGroup]" oznacza "tablica obiektów TaskGroup".
+
+- "selectedGroup: TaskGroup.ID?" – ID aktualnie wybranej grupy.
+  "?" oznacza, że wartość może być nil (czyli "nic" – nic nie wybrano).
+
+- "newGroupName" i "newTaskTitle" – zmienne przechowujące tekst,
+  który użytkownik wpisuje w pole tekstowe, zanim kliknie "Dodaj".
+
+---------------------------------------------------------------------
+2.2. BUDOWA EKRANU (body)
+---------------------------------------------------------------------
+
+    var body: some View {
+        NavigationView {
+
+- "NavigationView" – kontener, który tworzy podział ekranu na
+  lewą kolumnę (sidebar) i prawą część (szczegóły). Działa podobnie
+  jak podzielony ekran w Finderze.
+
+---------------------------------------------------------------------
+2.2.1. LEWA KOLUMNA – LISTA GRUP
+---------------------------------------------------------------------
+
+            List(selection: $selectedGroup) {
+
+- "List" – lista elementów. "selection: $selectedGroup" oznacza,
+  że lista pamięta, który element jest zaznaczony.
+  "selection: $selectedGroup" – znak $ oznacza "binding"
+  (połączenie w obie strony) – gdy użytkownik kliknie element,
+  selectedGroup automatycznie się aktualizuje.
+
+                ForEach(groups) { group in
+
+- "ForEach" – pętla, która przechodzi przez każdy element w tablicy
+  "groups" i dla każdego tworzy widok.
+
+                    HStack {
+                        Image(systemName: "list.bullet")
+                        Text(group.name)
+                        Spacer()
+                        Text("\(group.tasks.count)")
+                            .foregroundColor(.secondary)
+                    }
+
+- "HStack" – układ poziomy (elementy obok siebie).
+- "Image(systemName: ...)" – ikonka systemowa (tutaj lista).
+- "Text(group.name)" – wyświetla nazwę grupy.
+- "Spacer()" – wciskacz, który zajmuje całą wolną przestrzeń,
+  wypychając kolejne elementy w prawo.
+- "Text("\(group.tasks.count)")" – wyświetla liczbę zadań w grupie.
+  "\(...)" to interpolacja – wstawia wartość zmiennej w środek tekstu.
+- ".foregroundColor(.secondary)" – zmienia kolor tekstu na szary
+  (mniej ważny).
+
+                    .tag(group.id)
+                    .contextMenu {
+                        Button("Delete list", role: .destructive) {
+                            deleteGroup(group.id)
+                        }
+                    }
+
+- ".tag(group.id)" – przypisuje ID grupy do tego wiersza, dzięki
+  czemu List wie, który element jest zaznaczony.
+- ".contextMenu" – menu kontekstowe (po kliknięciu prawym przyciskiem).
+- "Button("Delete list", role: .destructive)" – przycisk oznaczony
+  jako "destrukcyjny" (czerwony kolor).
+
+                .onDelete { indexSet in
+                    for index in indexSet.sorted(by: >) {
+                        let id = groups[index].id
+                        groups.remove(at: index)
+                        if selectedGroup == id {
+                            selectedGroup = groups.first?.id
+                        }
+                    }
+                    save()
+                }
+
+- ".onDelete" – obsługa usuwania klawiszem Delete na klawiaturze.
+- "indexSet" – zbiór indeksów elementów do usunięcia.
+- "sorted(by: >)" – sortuje malejąco, aby usuwać od końca
+  (inaczej indeksy by się przesuwały).
+- "groups.first?.id" – jeśli usunęliśmy zaznaczoną grupę,
+  zaznacz pierwszą pozostałą (? oznacza "jeśli istnieje").
+
+                HStack {
+                    TextField("New list...", text: $newGroupName)
+                        .textFieldStyle(.plain)
+                    Button("+") {
+                        guard !newGroupName.trimmingCharacters(
+                            in: .whitespaces).isEmpty else { return }
+                        let group = TaskGroup(name: newGroupName, tasks: [])
+                        groups.append(group)
+                        selectedGroup = group.id
+                        newGroupName = ""
+                        save()
+                    }
+                }
+
+- Pole tekstowe do wpisania nazwy nowej grupy + przycisk "+".
+- "guard ... else { return }" – sprawdza, czy pole nie jest puste.
+  Jeśli puste – wychodzi z funkcji (return).
+- "trimmingCharacters(in: .whitespaces)" – usuwa spacje z początku
+  i końca tekstu.
+- "TaskGroup(name: newGroupName, tasks: [])" – tworzy nową grupę
+  z podaną nazwą i pustą tablicą zadań.
+- "groups.append(group)" – dodaje nową grupę do listy.
+- "newGroupName = """ – czyści pole tekstowe.
+
+            .listStyle(SidebarListStyle())
+            .frame(minWidth: 200)
+            .navigationTitle("Groups")
+
+- ".listStyle(SidebarListStyle())" – styl listy bocznej (jak
+  w Finderze).
+- ".frame(minWidth: 200)" – minimalna szerokość lewej kolumny.
+- ".navigationTitle("Groups")" – nagłówek okna.
+
+            .toolbar {
+                ToolbarItem {
+                    Button {
+                        if let id = selectedGroup {
+                            deleteGroup(id)
+                        }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .disabled(selectedGroup == nil)
+                }
+            }
+
+- ".toolbar" – pasek narzędziowy (górny pasek okna).
+- Przykisk kosza, który usuwa zaznaczoną grupę.
+- ".disabled(selectedGroup == nil)" – przycisk jest szary
+  i nieaktywny, gdy nic nie jest zaznaczone.
+
+---------------------------------------------------------------------
+2.2.2. PRAWA KOLUMNA – SZCZEGÓŁY GRUPY
+---------------------------------------------------------------------
+
+            if let selectedGroup = selectedGroup,
+               let index = groups.firstIndex(where: { $0.id == selectedGroup }) {
+
+- "if let ..." – to "optional binding". Sprawdza, czy istnieje
+  zaznaczona grupa (selectedGroup nie jest nil) i czy znajdziemy
+  jej indeks w tablicy. Jeśli tak – wykonuje kod w środku.
+
+                VStack {
+                    List {
+                        ForEach($groups[index].tasks) { $task in
+
+- "VStack" – układ pionowy (elementy jeden pod drugim).
+- "$groups[index].tasks" – $ oznacza binding, dzięki czemu
+  możemy modyfikować zadania (zmieniać isDone, title).
+- "$task" – binding do pojedynczego zadania.
+
+                            HStack {
+                                Button {
+                                    task.isDone.toggle()
+                                    save()
+                                } label: {
+                                    Image(systemName: task.isDone ?
+                                        "checkmark.circle.fill" : "circle")
+                                }
+                                Text(task.title)
+                                    .strikethrough(task.isDone)
+                                Spacer()
+                                Button {
+                                    deleteTask(in: groups[index].id,
+                                               task: task.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+- Pierwszy przycisk – oznacza zadanie jako zrobione.
+  "task.isDone.toggle()" – przełącza między true/false.
+- "?" to operator trójargumentowy: "warunek ? wartość_jeśli_prawda :
+  wartość_jeśli_fałsz". Jeśli isDone = true → ikona z wypełnionym
+  kółkiem, jeśli false → puste kółko.
+- ".strikethrough(task.isDone)" – jeśli zrobione, przekreśla tekst.
+- Drugi przycisk – kosz do usuwania zadania.
+
+                        .contextMenu {
+                            Button("Delete task", role: .destructive) {
+                                deleteTask(in: groups[index].id,
+                                           task: task.id)
+                            }
+                        }
+                    }
+                    .onDelete { indexSet in
+                        groups[index].tasks.remove(atOffsets: indexSet)
+                        save()
+                    }
+
+- Usuwanie klawiszem Delete dla zadań.
+
+                    HStack {
+                        TextField("New task...", text: $newTaskTitle)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Add") {
+                            guard !newTaskTitle.trimmingCharacters(
+                                in: .whitespaces).isEmpty else { return }
+                            groups[index].tasks.append(
+                                TodoItem(title: newTaskTitle))
+                            newTaskTitle = ""
+                            save()
+                        }
+                    }
+                    .padding()
+                }
+                .navigationTitle(groups[index].name)
+
+- Pole tekstowe + przycisk "Add" do dodawania nowych zadań.
+- ".padding()" – dodaje odstęp od krawędzi.
+- ".navigationTitle(groups[index].name)" – nagłówek z nazwą grupy.
+
+            } else {
+                Text("Select a list")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+- "else" – jeśli nie wybrano grupy, pokaż tekst "Select a list".
+- ".frame(maxWidth: .infinity, maxHeight: .infinity)" – rozciąga
+  tekst na całą dostępną przestrzeń.
+
+        }
+        .onAppear(perform: load)
+
+- ".onAppear" – funkcja wywoływana, gdy widok pojawia się na ekranie.
+  Tutaj ładuje zapisane dane.
+
+---------------------------------------------------------------------
+2.3. FUNKCJE POMOCNICZE
+---------------------------------------------------------------------
+
+    private func deleteGroup(_ id: TaskGroup.ID) {
+        groups.removeAll { $0.id == id }
+        if selectedGroup == id {
+            selectedGroup = groups.first?.id
+        }
+        save()
+    }
+
+- "private" – funkcja dostępna tylko wewnątrz tej struktury.
+- "removeAll { $0.id == id }" – usuwa z tablicy wszystkie elementy,
+  których id pasuje. "$0" to skrót: "pierwszy parametr" (czyli
+  każdy element tablicy).
+- Jeśli usunęliśmy zaznaczoną grupę, zaznacz pierwszą pozostałą.
+
+    private func deleteTask(in groupId: TaskGroup.ID, task taskId: TodoItem.ID) {
+        guard let index = groups.firstIndex(where: { $0.id == groupId })
+        else { return }
+        groups[index].tasks.removeAll { $0.id == taskId }
+        save()
+    }
+
+- "firstIndex(where: ...)" – znajduje indeks grupy o podanym ID.
+- Jeśli nie znajdzie – wychodzi (guard ... else { return }).
+- Następnie usuwa zadanie o podanym ID z tej grupy.
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(groups) {
+            groupsData = data
+        }
+    }
+
+- "JSONEncoder().encode(groups)" – zamienia całą tablicę grup
+  na format JSON (tekstowy zapis danych).
+- "try?" – jeśli kodowanie się nie uda, zwróci nil (nic).
+- "if let data = ..." – jeśli się udało, przypisz wynik do
+  zmiennej "data" i zapisz do groupsData (które jest @AppStorage
+  i automatycznie ląduje na dysku).
+
+    private func load() {
+        if let decoded = try? JSONDecoder().decode(
+            [TaskGroup].self, from: groupsData) {
+            groups = decoded
+        }
+    }
+
+- "JSONDecoder().decode([TaskGroup].self, from: groupsData)" –
+  odczytuje JSON z groupsData i zamienia go z powrotem na tablicę
+  TaskGroup.
+- Jeśli się uda, przypisuje do zmiennej "groups", co powoduje
+  odświeżenie widoku.
+
+
+=====================================================================
+3. PODSUMOWANIE – JAK TO WSZYSTKO DZIAŁA KROK PO KROKU
+=====================================================================
+
+1. Użytkownik uruchamia aplikację.
+2. "onAppear" wywołuje funkcję load().
+3. load() odczytuje zapisane dane z UserDefaults (dysku).
+4. Jeśli są zapisane grupy – wyświetla je w lewej kolumnie.
+5. Użytkownik może:
+   - Dodać nową grupę (wpisać nazwę i kliknąć "+")
+   - Kliknąć na grupę, aby zobaczyć jej zadania po prawej
+   - Usunąć grupę (prawy przycisk, klawisz Delete, kosz w toolbarze)
+   - Dodać zadanie (wpisać i kliknąć "Add")
+   - Oznaczyć zadanie jako zrobione (kliknąć kółko)
+   - Usunąć zadanie (prawy przycisk, klawisz Delete, kosz przy tasku)
+6. Za każdym razem, gdy coś się zmienia, wywoływana jest save(),
+   która zapisuje dane na dysk.
+7. Po ponownym uruchomieniu aplikacji wszystkie dane są odtwarzane.
+
+
+=====================================================================
+WAŻNE KONCEPCJE SWIFTA DLA POCZĄTKUJĄCYCH
+=====================================================================
+
+- "struct" – struktura, sposób definiowania nowego typu danych.
+- "var" – zmienna (można zmieniać jej wartość).
+- "let" – stała (wartość nie może się zmienić po przypisaniu).
+- "?" – typ opcjonalny (może być nil – brak wartości).
+- "!" – wymuszone rozpakowanie opcjonalnego (używać ostrożnie).
+- "$" – binding (połączenie w obie strony z @State).
+- "@State" – zmienna stanu, której zmiana odświeża ekran.
+- "@AppStorage" – zmienna automatycznie zapisywana na dysku.
+- "some View" – "jakiś typ widoku" (SwiftUI sam określa dokładny typ).
+- "Closure" – blok kodu w nawiasach klamrowych { ... }, często
+  przekazywany jako parametr do funkcji (np. w Button, onDelete).
+
+=====================================================================
